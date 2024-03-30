@@ -1,0 +1,94 @@
+terraform {
+  required_version = ">=0.12"
+
+  required_providers {
+    azurerm = {
+      source  = "hashicorp/azurerm"
+      version = "~>2.0"
+    }
+    random = {
+      source  = "hashicorp/random"
+      version = "~>3.0"
+    }
+  }
+}
+
+variable "resource_group_location" {
+  default     = "eastus"
+  description = "Location of the resource group."
+}
+
+variable "resource_group_name_prefix" {
+  default     = "rg"
+  description = "Prefix of the resource group name that's combined with a random ID so name is unique in your Azure subscription."
+}
+
+
+provider "azurerm" {
+  features {}
+}
+
+resource "random_pet" "rg_name" {
+  prefix = var.resource_group_name_prefix
+}
+
+resource "azurerm_resource_group" "rg" {
+  location = var.resource_group_location
+  name     = random_pet.rg_name.id
+}
+
+resource "azurerm_resource_group" "jenselman123" {
+  name     = "jenselman123"
+  location = "westus"
+}
+
+
+resource "azurerm_storage_account" "jenselman123" {
+  name                     = "jenselman123storage"
+  resource_group_name      = azurerm_resource_group.jenselman123.name
+  location                 = azurerm_resource_group.jenselman123.location
+  account_tier             = "Standard"
+  account_replication_type = "LRS"
+}
+
+
+resource "azurerm_resource_group" "conadere" {
+  name     = "conadere-resources"
+  location = "Canada Central"
+}
+
+resource "azurerm_virtual_network" "conadere" {
+  name                = "conadere-network"
+  resource_group_name = azurerm_resource_group.conadere.name
+  location            = azurerm_resource_group.conadere.location
+  address_space       = ["10.0.0.0/16"]
+}
+
+resource "azurerm_subnet" "web" {
+  name                 = "web-subnet"
+  resource_group_name  = azurerm_resource_group.conadere.name
+  virtual_network_name = azurerm_virtual_network.conadere.name
+  address_prefixes     = ["10.0.1.0/24"]
+}
+
+resource "azurerm_subnet" "app" {
+  name                 = "app-subnet"
+  resource_group_name  = azurerm_resource_group.conadere.name
+  virtual_network_name = azurerm_virtual_network.conadere.name
+  address_prefixes     = ["10.0.2.0/24"]
+}
+
+resource "azurerm_subnet" "data" {
+  name                 = "data-subnet"
+  resource_group_name  = azurerm_resource_group.conadere.name
+  virtual_network_name = azurerm_virtual_network.conadere.name
+  address_prefixes     = ["10.0.3.0/24"]
+}
+
+# Add your Log Analytics workspace
+resource "azurerm_log_analytics_workspace" "conadere" {
+  name                = "conadere-log-analytics"
+  location            = "Canada Central"
+  resource_group_name = azurerm_resource_group.conadere.name
+  sku                 = "PerGB2018"
+}
