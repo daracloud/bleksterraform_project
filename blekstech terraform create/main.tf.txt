@@ -1,0 +1,154 @@
+
+terraform {
+  required_version = ">=0.12"
+
+  required_providers {
+    azurerm = {
+      source  = "hashicorp/azurerm"
+      version = "~>2.0"
+    }
+    random = {
+      source  = "hashicorp/random"
+      version = "~>3.0"
+    }
+  }
+}
+
+variable "resource_group_location" {
+  default     = "westus"
+  description = "Location of the resource group."
+}
+
+variable "resource_group_name_prefix" {
+  default     = "rg"
+  description = "Prefix of the resource group name that's combined with a random ID so name is unique in your Azure subscription."
+}
+
+
+provider "azurerm" {
+  features {}
+}
+
+resource "random_pet" "rg_name" {
+  prefix = var.resource_group_name_prefix
+}
+
+resource "azurerm_resource_group" "rg" {
+  location = var.resource_group_location
+  name     = random_pet.rg_name.id
+}
+
+
+# Create a virtual network
+resource "azurerm_virtual_network" "vnet" {
+  name                = "myVNet"
+  location            = azurerm_resource_group.rg.location
+  resource_group_name = azurerm_resource_group.rg.name
+  address_space       = ["10.0.0.0/16"]
+}
+
+# Create a subnet
+resource "azurerm_subnet" "subnet" {
+  name                 = "internal"
+  resource_group_name  = azurerm_resource_group.rg.name
+  virtual_network_name = azurerm_virtual_network.vnet.name
+  address_prefixes     = ["10.0.2.0/24"]
+}
+
+# Create a management subnet
+resource "azurerm_subnet" "mgt_subnet" {
+  name                 = "mgtsubnet"
+  resource_group_name  = azurerm_resource_group.rg.name
+  virtual_network_name = azurerm_virtual_network.vnet.name
+  address_prefixes     = ["10.0.3.0/24"]
+}
+
+
+# Create network interfaces for production servers
+resource "azurerm_network_interface" "prodservers_nic" {
+  count               = 2
+  name                = "prodservers-nic-${count.index}"
+  location            = azurerm_resource_group.rg.location
+  resource_group_name = azurerm_resource_group.rg.name
+
+  ip_configuration {
+    name                          = "internal"
+    subnet_id                     = azurerm_subnet.subnet.id
+    private_ip_address_allocation = "Dynamic"
+  }
+}
+
+# Create two Windows Server 2016 virtual machines for production
+resource "azurerm_windows_virtual_machine" "prodservers" {
+  count                = 2
+  name                 = "prodservers-${count.index}"
+  location             = azurerm_resource_group.rg.location
+  resource_group_name  = azurerm_resource_group.rg.name
+  network_interface_ids = [azurerm_network_interface.prodservers_nic[count.index].id]
+  size                 = "Standard_DS1_v2" # Adjust the size as needed
+
+  admin_username       = "adminuser"
+  admin_password       = "Klnh;gh7987t756"
+
+  source_image_reference {
+    publisher = "MicrosoftWindowsServer"
+    offer     = "WindowsServer"
+    sku       = "2016-Datacenter"
+    version   = "latest"
+  }
+
+  os_disk {
+    caching              = "ReadWrite"
+    storage_account_type = "Standard_LRS"
+  }
+
+  # Enable monitoring and diagnostics
+  boot_diagnostics {
+    storage_account_uri = azurerm_storage_account.sa.primary_blob_endpoint
+  }
+}
+
+# Create a storage account for boot diagnostics and monitoring
+resource "azurerm_storage_account" "sa" {
+  name                     = "prodserversdiag${random_string.sa_suffix.result}"
+  resource_group_name      = azurerm_resource_group.rg.name
+  location                 = azurerm_resource_group.rg.location
+  account_tier             = "Standard"
+  account_replication_type = "LRS"
+}
+
+# Generate a random string for the storage account name suffix
+resource "random_string" "sa_suffix" {
+  length  = 4
+  special = false
+  upper   = false
+}
+
+####
+
+variable "location" {
+    description = "Location of the network"
+    default     = "eastus"
+}
+
+variable "username" {
+    description = "Username for Virtual Machines"
+    default     = "azureuser"
+}
+
+variable "password" {
+    description = "Password for Virtual Machines"
+}
+
+variable "vmsize" {
+    description = "Size of the VMs"
+    default     = "Standard_DS1_v2"
+}
+
+resource "azure" "name" {
+  
+}
+
+provider "azuread" {
+  
+}
